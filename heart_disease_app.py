@@ -164,7 +164,7 @@ if 'chat_mode' not in st.session_state:
 # Extract medical information from user text input
 def extract_medical_info(text):
     """
-    Extract medical information from user text input.
+    Enhanced medical information extraction from user text input.
     
     Parameters:
     -----------
@@ -179,69 +179,263 @@ def extract_medical_info(text):
     info = {}
     text_lower = text.lower()
     
-    # Extract age
-    age_match = re.search(r'\b(\d{1,3})\s*(?:years?\s*old|yo|age)\b', text_lower)
-    if age_match:
-        age = int(age_match.group(1))
-        if 20 <= age <= 100:
-            info['Age'] = age
+    # Extract age with multiple patterns
+    age_patterns = [
+        r'\b(\d{1,3})\s*(?:years?\s*old|yo|age|year-old)\b',
+        r'\bi\s*(?:am|\'m)\s*(?:a\s*)?(\d{1,3})\s*(?:years?\s*old|yo)?\b',
+        r'\b(\d{1,3})\s*(?:-|–)\s*year\s*old\b',
+        r'\bage\s*(?:of\s*|is\s*)?(\d{1,3})\b',
+        r'\b(\d{1,3})\s*yrs?\b'
+    ]
     
-    # Extract gender
-    if any(word in text_lower for word in ['male', 'man', 'men', 'boy']):
-        info['Sex'] = 1
-    elif any(word in text_lower for word in ['female', 'woman', 'women', 'girl']):
-        info['Sex'] = 0
+    for pattern in age_patterns:
+        age_match = re.search(pattern, text_lower)
+        if age_match:
+            age = int(age_match.group(1))
+            if 20 <= age <= 100:
+                info['Age'] = age
+                break
     
-    # Extract chest pain type
-    if any(word in text_lower for word in ['typical angina', 'typical chest pain']):
-        info['ChestPain'] = 'typical'
-    elif any(word in text_lower for word in ['atypical angina', 'atypical chest pain']):
-        info['ChestPain'] = 'nontypical'
-    elif any(word in text_lower for word in ['non-anginal', 'nonanginal']):
-        info['ChestPain'] = 'nonanginal'
-    elif any(word in text_lower for word in ['asymptomatic', 'no chest pain']):
-        info['ChestPain'] = 'asymptomatic'
-    elif 'chest pain' in text_lower:
-        info['ChestPain'] = 'typical'  # default assumption
+    # Extract gender with enhanced patterns
+    gender_patterns = [
+        (r'\b(?:i\s*(?:am|\'m)\s*(?:a\s*)?)?(?:male|man|men|boy|guy|gentleman)\b', 1),
+        (r'\b(?:i\s*(?:am|\'m)\s*(?:a\s*)?)?(?:female|woman|women|girl|lady)\b', 0),
+        (r'\bgender\s*(?:is\s*|:\s*)?(?:male|man)\b', 1),
+        (r'\bgender\s*(?:is\s*|:\s*)?(?:female|woman)\b', 0),
+        (r'\bsex\s*(?:is\s*|:\s*)?(?:male|m)\b', 1),
+        (r'\bsex\s*(?:is\s*|:\s*)?(?:female|f)\b', 0)
+    ]
     
-    # Extract blood pressure
-    bp_match = re.search(r'\b(\d{2,3})\s*(?:mmhg|mm hg|blood pressure|bp)\b', text_lower)
-    if bp_match:
-        bp = int(bp_match.group(1))
-        if 80 <= bp <= 220:
-            info['RestBP'] = bp
+    for pattern, gender_value in gender_patterns:
+        if re.search(pattern, text_lower):
+            info['Sex'] = gender_value
+            break
     
-    # Extract cholesterol
-    chol_match = re.search(r'\b(\d{2,3})\s*(?:mg/dl|cholesterol|chol)\b', text_lower)
-    if chol_match:
-        chol = int(chol_match.group(1))
-        if 100 <= chol <= 600:
-            info['Chol'] = chol
+    # Extract chest pain type with enhanced patterns
+    chest_pain_patterns = [
+        (r'\btypical\s*(?:angina|chest\s*pain)\b', 'typical'),
+        (r'\batypical\s*(?:angina|chest\s*pain)\b', 'nontypical'),
+        (r'\bnon[\s-]?anginal\s*(?:chest\s*pain)?\b', 'nonanginal'),
+        (r'\basymptomatic\b|no\s*chest\s*pain\b', 'asymptomatic'),
+        (r'\bchest\s*pain\b(?!\s*(?:type|is))', 'typical'),  # default assumption
+        (r'\bangina\b(?!\s*(?:typical|atypical))', 'typical')
+    ]
     
-    # Extract heart rate
-    hr_match = re.search(r'\b(\d{2,3})\s*(?:bpm|heart rate|hr|max hr)\b', text_lower)
-    if hr_match:
-        hr = int(hr_match.group(1))
-        if 50 <= hr <= 220:
-            info['MaxHR'] = hr
+    for pattern, chest_pain_type in chest_pain_patterns:
+        if re.search(pattern, text_lower):
+            info['ChestPain'] = chest_pain_type
+            break
+    
+    # Extract blood pressure with multiple patterns
+    bp_patterns = [
+        r'\b(?:blood\s*pressure|bp)\s*(?:is\s*|of\s*|:\s*)?(\d{2,3})(?:\s*mmhg|mm\s*hg)?\b',
+        r'\b(\d{2,3})\s*(?:mmhg|mm\s*hg)\s*(?:blood\s*pressure|bp)?\b',
+        r'\b(\d{2,3})/\d{2,3}\s*(?:mmhg|mm\s*hg)?\b',  # systolic from BP reading
+        r'\bpressure\s*(?:is\s*|of\s*|:\s*)?(\d{2,3})\b'
+    ]
+    
+    for pattern in bp_patterns:
+        bp_match = re.search(pattern, text_lower)
+        if bp_match:
+            bp = int(bp_match.group(1))
+            if 80 <= bp <= 220:
+                info['RestBP'] = bp
+                break
+    
+    # Extract cholesterol with multiple patterns
+    chol_patterns = [
+        r'\b(?:cholesterol|chol)\s*(?:is\s*|of\s*|level\s*is\s*|:\s*)?(\d{2,3})\s*(?:mg/dl|mg\s*/\s*dl)?\b',
+        r'\b(\d{2,3})\s*(?:mg/dl|mg\s*/\s*dl)\s*(?:cholesterol|chol)?\b',
+        r'\btotal\s*cholesterol\s*(?:is\s*|:\s*)?(\d{2,3})\b',
+        r'\bchol\s*(?:level\s*)?(?:is\s*|:\s*)?(\d{2,3})\b'
+    ]
+    
+    for pattern in chol_patterns:
+        chol_match = re.search(pattern, text_lower)
+        if chol_match:
+            chol = int(chol_match.group(1))
+            if 100 <= chol <= 600:
+                info['Chol'] = chol
+                break
+    
+    # Extract heart rate with multiple patterns
+    hr_patterns = [
+        r'\b(?:heart\s*rate|hr)\s*(?:is\s*|of\s*|:\s*)?(\d{2,3})\s*(?:bpm|beats\s*per\s*minute)?\b',
+        r'\b(?:max|maximum)\s*(?:heart\s*rate|hr)\s*(?:is\s*|of\s*|:\s*)?(\d{2,3})\b',
+        r'\b(\d{2,3})\s*(?:bpm|beats\s*per\s*minute)\b',
+        r'\bpulse\s*(?:is\s*|of\s*|:\s*)?(\d{2,3})\b'
+    ]
+    
+    for pattern in hr_patterns:
+        hr_match = re.search(pattern, text_lower)
+        if hr_match:
+            hr = int(hr_match.group(1))
+            if 50 <= hr <= 220:
+                info['MaxHR'] = hr
+                break
+    
+    # Extract exercise-related symptoms
+    exercise_patterns = [
+        r'\b(?:exercise|exertion|activity)\s*(?:induced\s*)?(?:chest\s*pain|angina|discomfort)\b',
+        r'\bchest\s*pain\s*(?:during|with|when)\s*(?:exercise|exertion|activity)\b',
+        r'\bpain\s*(?:during|with|when)\s*(?:exercise|exertion|walking|running)\b'
+    ]
+    
+    for pattern in exercise_patterns:
+        if re.search(pattern, text_lower):
+            info['ExAng'] = 1
+            break
     
     return info
 
+def generate_enhanced_fallback_response(user_message, context=""):
+    """
+    Generate enhanced fallback responses when AI service is unavailable
+    """
+    user_lower = user_message.lower()
+    
+    # Medical keyword responses
+    if any(word in user_lower for word in ['chest pain', 'angina', 'heart pain']):
+        return """🩺 **About Chest Pain & Heart Disease:**
+        
+Chest pain can have various causes:
+• **Typical angina:** Pressure/squeezing feeling, often triggered by exertion
+• **Atypical angina:** Sharp or burning pain, may occur at rest
+• **Non-cardiac:** Could be muscle strain, anxiety, or other conditions
+
+**When to seek immediate care:**
+• Severe chest pain with sweating
+• Pain radiating to arm, jaw, or back
+• Shortness of breath
+• Nausea or dizziness
+
+⚠️ Always consult healthcare professionals for chest pain evaluation."""
+
+    elif any(word in user_lower for word in ['blood pressure', 'bp', 'hypertension']):
+        return """📊 **Blood Pressure & Heart Health:**
+        
+**Normal ranges:**
+• Normal: Less than 120/80 mmHg
+• Elevated: 120-129 (systolic) and less than 80 (diastolic)
+• High (Stage 1): 130-139/80-89 mmHg
+• High (Stage 2): 140/90 mmHg or higher
+
+**Management tips:**
+• Regular exercise (30 minutes daily)
+• Low-sodium diet
+• Maintain healthy weight
+• Limit alcohol and quit smoking
+• Regular monitoring
+
+⚠️ Consult your doctor for proper blood pressure management."""
+
+    elif any(word in user_lower for word in ['cholesterol', 'chol']):
+        return """🧪 **Cholesterol & Heart Disease:**
+        
+**Cholesterol levels (mg/dL):**
+• Total cholesterol: Less than 200 (desirable)
+• LDL (bad): Less than 100 (optimal)
+• HDL (good): 40+ (men), 50+ (women)
+
+**Risk factors:**
+• High LDL cholesterol
+• Low HDL cholesterol
+• Family history
+• Poor diet and lifestyle
+
+**Improvement strategies:**
+• Heart-healthy diet
+• Regular physical activity
+• Weight management
+• Medication if prescribed
+
+⚠️ Regular lipid panels and medical consultation recommended."""
+
+    elif any(word in user_lower for word in ['age', 'old', 'years']):
+        return """⏰ **Age & Heart Disease Risk:**
+        
+Age is a significant risk factor:
+• **Men:** Risk increases after age 45
+• **Women:** Risk increases after age 55 (post-menopause)
+
+**Age-related considerations:**
+• Arteries naturally stiffen with age
+• Blood pressure tends to increase
+• Cholesterol levels may rise
+• Overall cardiovascular function changes
+
+**Preventive measures:**
+• Regular health screenings
+• Maintain active lifestyle
+• Heart-healthy diet
+• Stress management
+• Regular medical check-ups
+
+⚠️ Age-appropriate care plans should be discussed with healthcare providers."""
+
+    elif any(word in user_lower for word in ['exercise', 'activity', 'workout']):
+        return """🏃‍♂️ **Exercise & Heart Health:**
+        
+**Recommended activity:**
+• 150 minutes moderate aerobic activity per week
+• 75 minutes vigorous activity per week
+• Muscle strengthening 2+ days per week
+
+**Heart benefits:**
+• Strengthens heart muscle
+• Improves circulation
+• Lowers blood pressure
+• Manages cholesterol
+• Reduces stress
+
+**Exercise precautions:**
+• Start slowly if sedentary
+• Warm up and cool down
+• Stay hydrated
+• Stop if experiencing chest pain or severe shortness of breath
+
+⚠️ Consult healthcare providers before starting new exercise programs."""
+
+    else:
+        return f"""🤖 **Heart Disease Information:**
+        
+Thank you for your question about: "{user_message}"
+
+**Key heart disease risk factors:**
+• Age (men >45, women >55)
+• High blood pressure
+• High cholesterol
+• Smoking
+• Diabetes
+• Family history
+• Sedentary lifestyle
+
+**Common symptoms to watch:**
+• Chest pain or discomfort
+• Shortness of breath
+• Fatigue
+• Swelling in legs/feet
+• Irregular heartbeat
+
+**Prevention strategies:**
+• Regular exercise
+• Healthy diet
+• No smoking
+• Limited alcohol
+• Stress management
+• Regular check-ups
+
+⚠️ For personalized medical advice, please consult qualified healthcare professionals."""
+
+def get_medical_ai_response(user_message, context=""):
+    """
+    Alias for get_ai_response to maintain compatibility
+    """
+    return get_ai_response(user_message, context)
+
 def get_ai_response(user_message, context=""):
     """
-    Get response from Hugging Face Mistral model for more intelligent conversations
-    
-    Parameters:
-    -----------
-    user_message : str
-        User's message
-    context : str
-        Additional context about the conversation
-        
-    Returns:
-    --------
-    str
-        AI-generated response
+    Enhanced AI response system with better prompt engineering
     """
     try:
         headers = {
@@ -249,30 +443,57 @@ def get_ai_response(user_message, context=""):
             "Content-Type": "application/json"
         }
         
-        # Create a medical-focused prompt for Mistral
-        system_prompt = """You are a helpful medical AI assistant specializing in heart disease risk assessment. 
-        You provide educational information about cardiovascular health, risk factors, and symptoms. 
-        Always remind users to consult healthcare professionals for medical advice.
-        Be empathetic, informative, and encouraging. Keep responses concise and helpful."""
+        # Enhanced medical-focused prompt for Mistral
+        system_prompt = """You are an expert medical AI assistant specializing in heart disease risk assessment. 
         
-        # Format the prompt for Mistral
+Your role is to:
+- Extract medical information from patient descriptions
+- Provide educational information about cardiovascular health
+- Guide patients through risk assessment
+- Explain medical concepts in simple terms
+- Always recommend consulting healthcare professionals
+
+Be empathetic, professional, and informative. Focus on heart disease risk factors, symptoms, and prevention."""
+        
+        # Enhanced context processing
+        context_summary = ""
         if context:
-            full_prompt = f"<s>[INST] {system_prompt}\n\nContext: {context}\n\nUser question: {user_message} [/INST]"
-        else:
-            full_prompt = f"<s>[INST] {system_prompt}\n\nUser question: {user_message} [/INST]"
+            # Parse context to provide better responses
+            if "Patient data:" in context:
+                data_part = context.split("Patient data:")[1].split("|")[0].strip()
+                context_summary = f"Current patient information: {data_part}\n"
+            
+            if "Recent conversation:" in context:
+                conv_part = context.split("Recent conversation:")[1].strip()
+                context_summary += f"Recent discussion: {conv_part}\n"
+        
+        # Format the prompt for Mistral with better structure
+        full_prompt = f"""<s>[INST] {system_prompt}
+
+{context_summary}
+Patient says: "{user_message}"
+
+Please provide a helpful response that:
+1. Acknowledges any medical information shared
+2. Provides relevant educational information
+3. Suggests next steps if appropriate
+4. Reminds about professional medical consultation
+
+Response: [/INST]"""
         
         payload = {
             "inputs": full_prompt,
             "parameters": {
-                "max_new_tokens": 200,
+                "max_new_tokens": 250,
                 "temperature": 0.7,
                 "top_p": 0.9,
                 "do_sample": True,
-                "return_full_text": False
+                "return_full_text": False,
+                "repetition_penalty": 1.1
             }
         }
         
-        response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=15)
+        response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=20)
         
         if response.status_code == 200:
             result = response.json()
@@ -281,27 +502,284 @@ def get_ai_response(user_message, context=""):
                 
                 # Clean up the response
                 if ai_response:
-                    # Remove system prompt repetition if present
+                    # Remove any prompt repetition
                     ai_response = ai_response.replace(system_prompt, "").strip()
-                    # Add medical disclaimer if not present
+                    ai_response = ai_response.replace(user_message, "").strip()
+                    
+                    # Ensure medical disclaimer
                     if "consult" not in ai_response.lower() and "medical advice" not in ai_response.lower():
                         ai_response += "\n\n⚠️ Please consult healthcare professionals for medical advice."
                     
                     return ai_response
         
-        # Fallback to rule-based response
+        # Enhanced fallback
         return generate_enhanced_fallback_response(user_message, context)
         
     except requests.exceptions.Timeout:
-        st.warning("🤖 AI response is taking longer than usual. Using fallback response.")
+        st.warning("🤖 AI response taking longer than usual. Using enhanced response.")
         return generate_enhanced_fallback_response(user_message, context)
     except Exception as e:
-        st.warning(f"🤖 AI service temporarily unavailable. Using enhanced fallback.")
+        st.warning(f"🤖 AI service temporarily unavailable. Error: {str(e)}")
         return generate_enhanced_fallback_response(user_message, context)
 
-def get_medical_ai_response(user_message, context=""):
+def generate_smart_response(user_message, extracted_info=None):
     """
-    Get specialized medical response using Mistral model
+    Enhanced intelligent response system with better information processing
+    """
+    # Build comprehensive context
+    context_parts = []
+    
+    if st.session_state.user_data:
+        # Format existing data nicely
+        data_str = ", ".join([f"{k}: {v}" for k, v in st.session_state.user_data.items()])
+        context_parts.append(f"Existing patient data: {data_str}")
+    
+    if st.session_state.chat_history:
+        # Get more relevant conversation history
+        recent_history = st.session_state.chat_history[-4:]  # Last 4 exchanges
+        history_str = " | ".join([f"{role}: {msg[:100]}..." if len(msg) > 100 else f"{role}: {msg}" 
+                                 for role, msg, _ in recent_history])
+        context_parts.append(f"Recent conversation: {history_str}")
+    
+    context = " | ".join(context_parts)
+    
+    # Enhanced information extraction and response
+    if extracted_info:
+        response_parts = ["🩺 **Medical Information Successfully Extracted:**\n"]
+        
+        # Process extracted information with enhanced descriptions
+        for key, value in extracted_info.items():
+            if key == 'Sex':
+                response_parts.append(f"• **Gender:** {'Male' if value == 1 else 'Female'}")
+            elif key == 'Age':
+                age_category = ("Young adult" if value < 45 else 
+                              "Middle-aged" if value < 65 else "Senior")
+                response_parts.append(f"• **Age:** {value} years ({age_category})")
+            elif key == 'ChestPain':
+                chest_pain_desc = {
+                    'typical': 'Typical angina (classic chest pain)',
+                    'nontypical': 'Atypical angina',
+                    'nonanginal': 'Non-anginal chest pain',
+                    'asymptomatic': 'No chest pain symptoms'
+                }
+                response_parts.append(f"• **Chest Pain:** {chest_pain_desc.get(value, value.title())}")
+            elif key == 'RestBP':
+                bp_status = ("High (≥140)" if value >= 140 else 
+                           "Elevated (120-139)" if value >= 120 else "Normal (<120)")
+                response_parts.append(f"• **Blood Pressure:** {value} mmHg ({bp_status})")
+            elif key == 'Chol':
+                chol_status = ("High (≥240)" if value >= 240 else 
+                             "Borderline (200-239)" if value >= 200 else "Normal (<200)")
+                response_parts.append(f"• **Cholesterol:** {value} mg/dl ({chol_status})")
+            elif key == 'MaxHR':
+                max_hr_expected = 220 - st.session_state.user_data.get('Age', 50)
+                hr_status = ("Above expected" if value > max_hr_expected else 
+                           "Within normal range" if value > max_hr_expected * 0.8 else "Below expected")
+                response_parts.append(f"• **Max Heart Rate:** {value} bpm ({hr_status})")
+            elif key == 'ExAng':
+                response_parts.append(f"• **Exercise-Induced Symptoms:** {'Yes - pain with exertion' if value == 1 else 'No symptoms with exercise'}")
+        
+        # Update session state with new information
+        st.session_state.user_data.update(extracted_info)
+        
+        # Enhanced completeness check
+        essential_fields = ['Age', 'Sex', 'ChestPain', 'RestBP', 'Chol']
+        additional_fields = ['MaxHR', 'ExAng']
+        
+        missing_essential = [field for field in essential_fields if field not in st.session_state.user_data]
+        missing_additional = [field for field in additional_fields if field not in st.session_state.user_data]
+        
+        if missing_essential:
+            response_parts.append(f"\n📋 **Essential information still needed:** {', '.join(missing_essential)}")
+            response_parts.append("Please provide these details for a complete assessment.")
+        elif missing_additional:
+            response_parts.append(f"\n📊 **Additional helpful information:** {', '.join(missing_additional)}")
+            response_parts.append("You can provide more details or proceed with current information.")
+        else:
+            response_parts.append("\n✅ **Comprehensive information collected!** Ready for detailed risk assessment.")
+        
+        # Add AI-powered medical insight
+        try:
+            # Create enhanced context for AI analysis
+            medical_context = f"Patient profile: {extracted_info}. Complete data: {st.session_state.user_data}"
+            
+            # Enhanced AI query for medical insights
+            insight_query = f"""Based on the medical information provided ({extracted_info}), provide brief educational insights about:
+            1. The significance of these values for heart disease risk
+            2. Any notable risk factors identified
+            3. General recommendations (not medical advice)
+            
+            Keep response concise and educational."""
+            
+            ai_insight = get_medical_ai_response(insight_query, medical_context)
+            
+            if ai_insight and len(ai_insight) > 30:
+                response_parts.append(f"\n💡 **AI Medical Insight:**\n{ai_insight}")
+        except Exception as e:
+            # Fallback insight based on extracted information
+            risk_factors = []
+            if 'Age' in extracted_info and extracted_info['Age'] > 45:
+                risk_factors.append("age-related risk increase")
+            if 'RestBP' in extracted_info and extracted_info['RestBP'] >= 140:
+                risk_factors.append("elevated blood pressure")
+            if 'Chol' in extracted_info and extracted_info['Chol'] >= 240:
+                risk_factors.append("high cholesterol")
+            
+            if risk_factors:
+                response_parts.append(f"\n⚠️ **Notable factors:** {', '.join(risk_factors)} detected.")
+        
+        return "\n".join(response_parts)
+    
+    # Enhanced general query handling with AI
+    try:
+        # Create better context for general medical queries
+        enhanced_context = context
+        if st.session_state.user_data:
+            data_summary = f"Patient has provided: {', '.join(st.session_state.user_data.keys())}"
+            enhanced_context += f" | {data_summary}"
+        
+        return get_medical_ai_response(user_message, enhanced_context)
+    except:
+        return generate_enhanced_fallback_response(user_message, context)
+
+# Initialize session state for chat history
+if 'chat_history' not in st.session_state:
+    st.session_state.chat_history = []
+if 'user_data' not in st.session_state:
+    st.session_state.user_data = {}
+if 'chat_mode' not in st.session_state:
+    st.session_state.chat_mode = False
+
+# Extract medical information from user text input
+def extract_medical_info(text):
+    """
+    Enhanced medical information extraction from user text input.
+    
+    Parameters:
+    -----------
+    text : str
+        User input text
+        
+    Returns:
+    --------
+    dict
+        Extracted medical information
+    """
+    info = {}
+    text_lower = text.lower()
+    
+    # Extract age with multiple patterns
+    age_patterns = [
+        r'\b(\d{1,3})\s*(?:years?\s*old|yo|age|year-old)\b',
+        r'\bi\s*(?:am|\'m)\s*(?:a\s*)?(\d{1,3})\s*(?:years?\s*old|yo)?\b',
+        r'\b(\d{1,3})\s*(?:-|–)\s*year\s*old\b',
+        r'\bage\s*(?:of\s*|is\s*)?(\d{1,3})\b',
+        r'\b(\d{1,3})\s*yrs?\b'
+    ]
+    
+    for pattern in age_patterns:
+        age_match = re.search(pattern, text_lower)
+        if age_match:
+            age = int(age_match.group(1))
+            if 20 <= age <= 100:
+                info['Age'] = age
+                break
+    
+    # Extract gender with enhanced patterns
+    gender_patterns = [
+        (r'\b(?:i\s*(?:am|\'m)\s*(?:a\s*)?)?(?:male|man|men|boy|guy|gentleman)\b', 1),
+        (r'\b(?:i\s*(?:am|\'m)\s*(?:a\s*)?)?(?:female|woman|women|girl|lady)\b', 0),
+        (r'\bgender\s*(?:is\s*|:\s*)?(?:male|man)\b', 1),
+        (r'\bgender\s*(?:is\s*|:\s*)?(?:female|woman)\b', 0),
+        (r'\bsex\s*(?:is\s*|:\s*)?(?:male|m)\b', 1),
+        (r'\bsex\s*(?:is\s*|:\s*)?(?:female|f)\b', 0)
+    ]
+    
+    for pattern, gender_value in gender_patterns:
+        if re.search(pattern, text_lower):
+            info['Sex'] = gender_value
+            break
+    
+    # Extract chest pain type with enhanced patterns
+    chest_pain_patterns = [
+        (r'\btypical\s*(?:angina|chest\s*pain)\b', 'typical'),
+        (r'\batypical\s*(?:angina|chest\s*pain)\b', 'nontypical'),
+        (r'\bnon[\s-]?anginal\s*(?:chest\s*pain)?\b', 'nonanginal'),
+        (r'\basymptomatic\b|no\s*chest\s*pain\b', 'asymptomatic'),
+        (r'\bchest\s*pain\b(?!\s*(?:type|is))', 'typical'),  # default assumption
+        (r'\bangina\b(?!\s*(?:typical|atypical))', 'typical')
+    ]
+    
+    for pattern, chest_pain_type in chest_pain_patterns:
+        if re.search(pattern, text_lower):
+            info['ChestPain'] = chest_pain_type
+            break
+    
+    # Extract blood pressure with multiple patterns
+    bp_patterns = [
+        r'\b(?:blood\s*pressure|bp)\s*(?:is\s*|of\s*|:\s*)?(\d{2,3})(?:\s*mmhg|mm\s*hg)?\b',
+        r'\b(\d{2,3})\s*(?:mmhg|mm\s*hg)\s*(?:blood\s*pressure|bp)?\b',
+        r'\b(\d{2,3})/\d{2,3}\s*(?:mmhg|mm\s*hg)?\b',  # systolic from BP reading
+        r'\bpressure\s*(?:is\s*|of\s*|:\s*)?(\d{2,3})\b'
+    ]
+    
+    for pattern in bp_patterns:
+        bp_match = re.search(pattern, text_lower)
+        if bp_match:
+            bp = int(bp_match.group(1))
+            if 80 <= bp <= 220:
+                info['RestBP'] = bp
+                break
+    
+    # Extract cholesterol with multiple patterns
+    chol_patterns = [
+        r'\b(?:cholesterol|chol)\s*(?:is\s*|of\s*|level\s*is\s*|:\s*)?(\d{2,3})\s*(?:mg/dl|mg\s*/\s*dl)?\b',
+        r'\b(\d{2,3})\s*(?:mg/dl|mg\s*/\s*dl)\s*(?:cholesterol|chol)?\b',
+        r'\btotal\s*cholesterol\s*(?:is\s*|:\s*)?(\d{2,3})\b',
+        r'\bchol\s*(?:level\s*)?(?:is\s*|:\s*)?(\d{2,3})\b'
+    ]
+    
+    for pattern in chol_patterns:
+        chol_match = re.search(pattern, text_lower)
+        if chol_match:
+            chol = int(chol_match.group(1))
+            if 100 <= chol <= 600:
+                info['Chol'] = chol
+                break
+    
+    # Extract heart rate with multiple patterns
+    hr_patterns = [
+        r'\b(?:heart\s*rate|hr)\s*(?:is\s*|of\s*|:\s*)?(\d{2,3})\s*(?:bpm|beats\s*per\s*minute)?\b',
+        r'\b(?:max|maximum)\s*(?:heart\s*rate|hr)\s*(?:is\s*|of\s*|:\s*)?(\d{2,3})\b',
+        r'\b(\d{2,3})\s*(?:bpm|beats\s*per\s*minute)\b',
+        r'\bpulse\s*(?:is\s*|of\s*|:\s*)?(\d{2,3})\b'
+    ]
+    
+    for pattern in hr_patterns:
+        hr_match = re.search(pattern, text_lower)
+        if hr_match:
+            hr = int(hr_match.group(1))
+            if 50 <= hr <= 220:
+                info['MaxHR'] = hr
+                break
+    
+    # Extract exercise-related symptoms
+    exercise_patterns = [
+        r'\b(?:exercise|exertion|activity)\s*(?:induced\s*)?(?:chest\s*pain|angina|discomfort)\b',
+        r'\bchest\s*pain\s*(?:during|with|when)\s*(?:exercise|exertion|activity)\b',
+        r'\bpain\s*(?:during|with|when)\s*(?:exercise|exertion|walking|running)\b'
+    ]
+    
+    for pattern in exercise_patterns:
+        if re.search(pattern, text_lower):
+            info['ExAng'] = 1
+            break
+    
+    return info
+
+def get_ai_response(user_message, context=""):
+    """
+    Enhanced AI response system with better prompt engineering
     """
     try:
         headers = {
@@ -309,362 +787,202 @@ def get_medical_ai_response(user_message, context=""):
             "Content-Type": "application/json"
         }
         
-        # Create medical prompt for Mistral
-        medical_prompt = f"""<s>[INST] You are a medical AI assistant for heart disease risk assessment. 
+        # Enhanced medical-focused prompt for Mistral
+        system_prompt = """You are an expert medical AI assistant specializing in heart disease risk assessment. 
         
-        Context: {context}
-        Patient Query: {user_message}
+Your role is to:
+- Extract medical information from patient descriptions
+- Provide educational information about cardiovascular health
+- Guide patients through risk assessment
+- Explain medical concepts in simple terms
+- Always recommend consulting healthcare professionals
 
-        Provide helpful, educational information about:
-        - Heart disease risk factors
-        - Symptoms to monitor
-        - Lifestyle recommendations
-        - When to seek medical care
+Be empathetic, professional, and informative. Focus on heart disease risk factors, symptoms, and prevention."""
+        
+        # Enhanced context processing
+        context_summary = ""
+        if context:
+            # Parse context to provide better responses
+            if "Patient data:" in context:
+                data_part = context.split("Patient data:")[1].split("|")[0].strip()
+                context_summary = f"Current patient information: {data_part}\n"
+            
+            if "Recent conversation:" in context:
+                conv_part = context.split("Recent conversation:")[1].strip()
+                context_summary += f"Recent discussion: {conv_part}\n"
+        
+        # Format the prompt for Mistral with better structure
+        full_prompt = f"""<s>[INST] {system_prompt}
 
-        Keep the response concise, informative, and always remind to consult healthcare professionals. [/INST]"""
+{context_summary}
+Patient says: "{user_message}"
+
+Please provide a helpful response that:
+1. Acknowledges any medical information shared
+2. Provides relevant educational information
+3. Suggests next steps if appropriate
+4. Reminds about professional medical consultation
+
+Response: [/INST]"""
         
         payload = {
-            "inputs": medical_prompt,
+            "inputs": full_prompt,
             "parameters": {
-                "max_new_tokens": 150,
-                "temperature": 0.6,
-                "top_p": 0.8,
+                "max_new_tokens": 250,
+                "temperature": 0.7,
+                "top_p": 0.9,
                 "do_sample": True,
-                "return_full_text": False
+                "return_full_text": False,
+                "repetition_penalty": 1.1
             }
         }
         
-        response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=15)
+        response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=20)
         
         if response.status_code == 200:
             result = response.json()
             if isinstance(result, list) and len(result) > 0:
                 ai_response = result[0].get('generated_text', '').strip()
                 
-                if ai_response and len(ai_response) > 20:
+                # Clean up the response
+                if ai_response:
+                    # Remove any prompt repetition
+                    ai_response = ai_response.replace(system_prompt, "").strip()
+                    ai_response = ai_response.replace(user_message, "").strip()
+                    
+                    # Ensure medical disclaimer
+                    if "consult" not in ai_response.lower() and "medical advice" not in ai_response.lower():
+                        ai_response += "\n\n⚠️ Please consult healthcare professionals for medical advice."
+                    
                     return ai_response
         
-        # Fallback to general conversational AI
-        return get_ai_response(user_message, context)
+        # Enhanced fallback
+        return generate_enhanced_fallback_response(user_message, context)
         
+    except requests.exceptions.Timeout:
+        st.warning("🤖 AI response taking longer than usual. Using enhanced response.")
+        return generate_enhanced_fallback_response(user_message, context)
     except Exception as e:
-        return get_ai_response(user_message, context)
-
-def generate_enhanced_fallback_response(user_message, context=""):
-    """
-    Enhanced fallback response system with better medical knowledge
-    """
-    message_lower = user_message.lower()
-    
-    # Greeting responses
-    if any(greeting in message_lower for greeting in ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'greetings']):
-        return """👋 Hello! I'm your AI-powered Heart Disease Risk Assessment Assistant.
-
-🩺 **I can help you with:**
-• Understanding heart disease risk factors
-• Analyzing symptoms and medical information
-• Providing educational content about cardiovascular health
-• Guiding you through risk assessment
-
-💬 **Try asking me:**
-• "What are the signs of heart disease?"
-• "How does age affect heart disease risk?"
-• Share your medical details for assessment
-
-How can I assist you with your cardiovascular health today?"""
-    
-    # Help and capability responses
-    elif any(word in message_lower for word in ['help', 'what can you do', 'how does this work', 'capabilities']):
-        return """🤖 **AI Assistant Capabilities:**
-        - Understands complex medical queries
-        - Provides personalized health education
-        - Remembers conversation context
-        - Offers evidence-based insights
-        
-        **🩺 I can help with:**
-        - **Risk Assessment:** Share your medical details for analysis
-        - **Symptom Analysis:** Describe what you're experiencing
-        - **Educational Info:** Learn about heart disease prevention
-        - **Lifestyle Guidance:** Get personalized recommendations
-        
-        **Example:** "I'm 58 years old, male, with high blood pressure 160 mmHg and cholesterol 280. I get chest pain when exercising."
-
-        What would you like to know about heart disease risk?"""
-    
-    # Symptoms and risk factors
-    elif any(word in message_lower for word in ['symptoms', 'signs', 'risk factors', 'warning signs']):
-        return """🚨 **Heart Disease Warning Signs & Risk Factors:**
-
-**🔴 Immediate Warning Signs:**
-• Chest pain, pressure, or tightness
-• Pain radiating to arms, neck, jaw, back
-• Shortness of breath
-• Cold sweats, nausea, lightheadedness
-• Fatigue or weakness
-
-**⚠️ Major Risk Factors:**
-• **Age:** Men ≥45, Women ≥55
-• **High Blood Pressure:** ≥140/90 mmHg
-• **High Cholesterol:** ≥240 mg/dl
-• **Smoking & Diabetes**
-• **Family History**
-• **Obesity & Physical Inactivity**
-
-**📊 Modifiable Risk Factors:**
-• Diet high in saturated fats
-• Lack of exercise
-• Stress and poor sleep
-• Excessive alcohol consumption
-
-🆘 **Seek immediate medical attention** if experiencing severe chest pain, difficulty breathing, or signs of heart attack.
-
-Would you like to share any symptoms or risk factors you're concerned about?"""
-    
-    # Chest pain specific responses
-    elif 'chest pain' in message_lower or 'chest discomfort' in message_lower:
-        return """💔 **Understanding Chest Pain Types:**
-
-**🔴 Typical Angina (Classic):**
-• Pressure, squeezing, or burning in chest
-• Triggered by physical exertion or stress
-• Relieved by rest or medication
-• May radiate to arms, neck, jaw
-
-**🟡 Atypical Angina:**
-• Similar to typical but with unusual features
-• May occur at rest
-• Different triggers or relief patterns
-
-**🟢 Non-Anginal Chest Pain:**
-• Sharp, stabbing, or localized
-• Not related to exertion
-• Lasts seconds or hours
-• Often musculoskeletal
-
-**⚪ Asymptomatic:**
-• No chest pain symptoms
-• Silent heart disease possible
-• Other symptoms may be present
-
-**🚨 Emergency Signs:**
-• Crushing chest pressure
-• Pain with sweating, nausea
-• Severe shortness of breath
-• Pain lasting >20 minutes
-
-Can you describe your chest pain in more detail? When does it occur?"""
-    
-    # Blood pressure information
-    elif any(word in message_lower for word in ['blood pressure', 'bp', 'hypertension', 'pressure']):
-        return """🩺 **Blood Pressure & Heart Disease:**
-
-**📊 Blood Pressure Categories:**
-• **Normal:** <120/80 mmHg
-• **Elevated:** 120-129/<80 mmHg
-• **High Stage 1:** 130-139/80-89 mmHg
-• **High Stage 2:** ≥140/90 mmHg
-• **Crisis:** >180/120 mmHg (Emergency!)
-
-**💔 Impact on Heart Disease:**
-High blood pressure makes your heart work harder and can damage arteries over time, significantly increasing heart disease risk.
-
-**🎯 Management Strategies:**
-• **Diet:** Reduce sodium, increase potassium
-• **Exercise:** 150 mins moderate activity/week
-• **Weight:** Maintain healthy BMI
-• **Stress:** Practice relaxation techniques
-• **Medication:** As prescribed by doctor
-
-**📈 Monitoring Tips:**
-• Check at same time daily
-• Rest 5 minutes before measuring
-• Use proper cuff size
-• Keep a log for your doctor
-
-What's your current blood pressure reading?"""
-    
-    # Cholesterol information
-    elif any(word in message_lower for word in ['cholesterol', 'chol', 'lipids']):
-        return """🧪 **Cholesterol & Heart Health:**
-
-**📊 Optimal Levels:**
-• **Total Cholesterol:** <200 mg/dL
-• **LDL (Bad):** <100 mg/dL (optimal)
-• **HDL (Good):** >40 mg/dL (men), >50 mg/dL (women)
-• **Triglycerides:** <150 mg/dL
-
-**⚠️ Risk Categories:**
-• **Borderline High:** 200-239 mg/dL total
-• **High:** ≥240 mg/dL total
-• **Very High LDL:** ≥190 mg/dL
-
-**🔄 How It Affects Heart:**
-• LDL builds up in artery walls
-• Creates plaques that narrow arteries
-• Can rupture and cause clots
-• Leads to heart attacks and strokes
-
-**🥗 Natural Management:**
-• **Eat:** Oats, fish, nuts, olive oil
-• **Avoid:** Trans fats, processed foods
-• **Exercise:** Raises HDL, lowers LDL
-• **Weight Loss:** Improves all levels
-
-Do you know your current cholesterol numbers?"""
-    
-    # Age and gender factors
-    elif any(word in message_lower for word in ['age', 'gender', 'sex', 'older', 'aging']):
-        return """👥 **Age & Gender in Heart Disease Risk:**
-
-**📈 Age Factors:**
-• **Men:** Risk increases after age 45
-• **Women:** Risk increases after menopause (55+)
-• **Elderly:** Highest risk group (65+)
-• **Young Adults:** Lower risk but not immune
-
-**♂️ Men vs ♀️ Women:**
-• **Men:** Earlier onset, more obvious symptoms
-• **Women:** Often atypical symptoms
-• **Post-menopause:** Women's risk equals men's
-• **Hormones:** Estrogen protective before menopause
-
-**🔄 Age-Related Changes:**
-• Arteries stiffen and narrow
-• Heart muscle weakens
-• Blood pressure tends to rise
-• Cholesterol levels may increase
-
-**💪 Prevention at Any Age:**
-• Never too late to start healthy habits
-• Exercise adapted to ability
-• Regular medical check-ups
-• Medication compliance
-
-What's your age and gender? This helps assess your baseline risk."""
-    
-    # Lifestyle and prevention
-    elif any(word in message_lower for word in ['lifestyle', 'prevention', 'exercise', 'diet', 'healthy']):
-        return """💪 **Heart-Healthy Lifestyle:**
-
-**🏃‍♂️ Exercise Guidelines:**
-• **Aerobic:** 150 mins moderate OR 75 mins vigorous/week
-• **Strength:** 2+ days/week muscle strengthening
-• **Daily:** Any movement better than none
-• **Examples:** Walking, swimming, cycling, dancing
-
-**🥗 Heart-Healthy Diet:**
-• **Mediterranean Style:** Fish, olive oil, nuts, fruits
-• **Limit:** Saturated fats, trans fats, sodium
-• **Increase:** Fiber, potassium, omega-3s
-• **Portions:** Control serving sizes
-
-**🚭 Lifestyle Modifications:**
-• **No Smoking:** #1 preventable risk factor
-• **Moderate Alcohol:** ≤1 drink/day (women), ≤2 (men)
-• **Stress Management:** Yoga, meditation, hobbies
-• **Sleep:** 7-9 hours quality sleep nightly
-
-**📊 Regular Monitoring:**
-• Blood pressure checks
-• Cholesterol screening
-• Blood sugar testing
-• Weight management
-
-Which aspect of heart-healthy living interests you most?"""
-    
-    # Default comprehensive response
-    else:
-        return f"""🤖 **AI Heart Health Assistant Ready!**
-
-I understand you're asking about: "{user_message}"
-
-🩺 **I can help with:**
-• **Risk Assessment:** Share your medical details for analysis
-• **Symptom Analysis:** Describe what you're experiencing
-• **Educational Info:** Learn about heart disease prevention
-• **Lifestyle Guidance:** Get personalized recommendations
-
-📝 **For best results, try:**
-• "I'm [age] years old, [gender], with [symptoms/conditions]"
-• "What does blood pressure 150/90 mean for heart risk?"
-• "I have chest pain when exercising, should I worry?"
-
-💡 **Quick Links:**
-• Heart disease symptoms and warning signs
-• Blood pressure and cholesterol information
-• Exercise and diet recommendations
-• When to seek medical care
-
-What specific aspect of heart health would you like to explore?
-
-⚠️ **Remember:** This is educational information only. Always consult healthcare professionals for medical advice and diagnosis."""
+        st.warning(f"🤖 AI service temporarily unavailable. Error: {str(e)}")
+        return generate_enhanced_fallback_response(user_message, context)
 
 def generate_smart_response(user_message, extracted_info=None):
     """
-    Enhanced intelligent response combining Hugging Face AI and medical data extraction
+    Enhanced intelligent response system with better information processing
     """
-    # Build context from conversation history and extracted data
+    # Build comprehensive context
     context_parts = []
     
     if st.session_state.user_data:
-        context_parts.append(f"Patient data: {st.session_state.user_data}")
+        # Format existing data nicely
+        data_str = ", ".join([f"{k}: {v}" for k, v in st.session_state.user_data.items()])
+        context_parts.append(f"Existing patient data: {data_str}")
     
     if st.session_state.chat_history:
-        recent_history = st.session_state.chat_history[-3:]  # Last 3 exchanges
-        context_parts.append("Recent conversation: " + " | ".join([f"{role}: {msg}" for role, msg, _ in recent_history]))
+        # Get more relevant conversation history
+        recent_history = st.session_state.chat_history[-4:]  # Last 4 exchanges
+        history_str = " | ".join([f"{role}: {msg[:100]}..." if len(msg) > 100 else f"{role}: {msg}" 
+                                 for role, msg, _ in recent_history])
+        context_parts.append(f"Recent conversation: {history_str}")
     
     context = " | ".join(context_parts)
     
-    # If we extracted medical information, format it and update session
+    # Enhanced information extraction and response
     if extracted_info:
-        response_parts = ["🩺 **Medical Information Recorded:**\n"]
+        response_parts = ["🩺 **Medical Information Successfully Extracted:**\n"]
         
+        # Process extracted information with enhanced descriptions
         for key, value in extracted_info.items():
             if key == 'Sex':
                 response_parts.append(f"• **Gender:** {'Male' if value == 1 else 'Female'}")
             elif key == 'Age':
-                response_parts.append(f"• **Age:** {value} years")
+                age_category = ("Young adult" if value < 45 else 
+                              "Middle-aged" if value < 65 else "Senior")
+                response_parts.append(f"• **Age:** {value} years ({age_category})")
             elif key == 'ChestPain':
-                response_parts.append(f"• **Chest Pain Type:** {value.title()}")
+                chest_pain_desc = {
+                    'typical': 'Typical angina (classic chest pain)',
+                    'nontypical': 'Atypical angina',
+                    'nonanginal': 'Non-anginal chest pain',
+                    'asymptomatic': 'No chest pain symptoms'
+                }
+                response_parts.append(f"• **Chest Pain:** {chest_pain_desc.get(value, value.title())}")
             elif key == 'RestBP':
-                bp_status = "High" if value >= 140 else "Elevated" if value >= 120 else "Normal"
+                bp_status = ("High (≥140)" if value >= 140 else 
+                           "Elevated (120-139)" if value >= 120 else "Normal (<120)")
                 response_parts.append(f"• **Blood Pressure:** {value} mmHg ({bp_status})")
             elif key == 'Chol':
-                chol_status = "High" if value >= 240 else "Borderline" if value >= 200 else "Normal"
+                chol_status = ("High (≥240)" if value >= 240 else 
+                             "Borderline (200-239)" if value >= 200 else "Normal (<200)")
                 response_parts.append(f"• **Cholesterol:** {value} mg/dl ({chol_status})")
             elif key == 'MaxHR':
-                response_parts.append(f"• **Max Heart Rate:** {value} bpm")
+                max_hr_expected = 220 - st.session_state.user_data.get('Age', 50)
+                hr_status = ("Above expected" if value > max_hr_expected else 
+                           "Within normal range" if value > max_hr_expected * 0.8 else "Below expected")
+                response_parts.append(f"• **Max Heart Rate:** {value} bpm ({hr_status})")
+            elif key == 'ExAng':
+                response_parts.append(f"• **Exercise-Induced Symptoms:** {'Yes - pain with exertion' if value == 1 else 'No symptoms with exercise'}")
         
-        # Update session state
+        # Update session state with new information
         st.session_state.user_data.update(extracted_info)
         
-        # Check completeness
-        required_fields = ['Age', 'Sex', 'ChestPain', 'RestBP', 'Chol', 'MaxHR']
-        missing_info = [field for field in required_fields if field not in st.session_state.user_data]
+        # Enhanced completeness check
+        essential_fields = ['Age', 'Sex', 'ChestPain', 'RestBP', 'Chol']
+        additional_fields = ['MaxHR', 'ExAng']
         
-        if missing_info:
-            response_parts.append(f"\n📋 **Still needed:** {', '.join(missing_info)}")
-            response_parts.append("Please provide more details or use the detailed form below.")
+        missing_essential = [field for field in essential_fields if field not in st.session_state.user_data]
+        missing_additional = [field for field in additional_fields if field not in st.session_state.user_data]
+        
+        if missing_essential:
+            response_parts.append(f"\n📋 **Essential information still needed:** {', '.join(missing_essential)}")
+            response_parts.append("Please provide these details for a complete assessment.")
+        elif missing_additional:
+            response_parts.append(f"\n📊 **Additional helpful information:** {', '.join(missing_additional)}")
+            response_parts.append("You can provide more details or proceed with current information.")
         else:
-            response_parts.append("\n✅ **Complete information collected!** Ready for risk assessment.")
+            response_parts.append("\n✅ **Comprehensive information collected!** Ready for detailed risk assessment.")
         
-        # Add AI insight about the provided information
+        # Add AI-powered medical insight
         try:
-            ai_context = f"Patient provided: {extracted_info}. Existing data: {st.session_state.user_data}"
-            ai_insight = get_medical_ai_response(
-                f"Analyze this medical information and provide brief educational insights: {extracted_info}",
-                ai_context
-            )
-            if ai_insight and len(ai_insight) > 20:
-                response_parts.append(f"\n💡 **AI Insight:** {ai_insight}")
-        except:
-            pass
+            # Create enhanced context for AI analysis
+            medical_context = f"Patient profile: {extracted_info}. Complete data: {st.session_state.user_data}"
+            
+            # Enhanced AI query for medical insights
+            insight_query = f"""Based on the medical information provided ({extracted_info}), provide brief educational insights about:
+            1. The significance of these values for heart disease risk
+            2. Any notable risk factors identified
+            3. General recommendations (not medical advice)
+            
+            Keep response concise and educational."""
+            
+            ai_insight = get_medical_ai_response(insight_query, medical_context)
+            
+            if ai_insight and len(ai_insight) > 30:
+                response_parts.append(f"\n💡 **AI Medical Insight:**\n{ai_insight}")
+        except Exception as e:
+            # Fallback insight based on extracted information
+            risk_factors = []
+            if 'Age' in extracted_info and extracted_info['Age'] > 45:
+                risk_factors.append("age-related risk increase")
+            if 'RestBP' in extracted_info and extracted_info['RestBP'] >= 140:
+                risk_factors.append("elevated blood pressure")
+            if 'Chol' in extracted_info and extracted_info['Chol'] >= 240:
+                risk_factors.append("high cholesterol")
+            
+            if risk_factors:
+                response_parts.append(f"\n⚠️ **Notable factors:** {', '.join(risk_factors)} detected.")
         
         return "\n".join(response_parts)
     
-    # For general queries, use AI response
+    # Enhanced general query handling with AI
     try:
-        return get_medical_ai_response(user_message, context)
+        # Create better context for general medical queries
+        enhanced_context = context
+        if st.session_state.user_data:
+            data_summary = f"Patient has provided: {', '.join(st.session_state.user_data.keys())}"
+            enhanced_context += f" | {data_summary}"
+        
+        return get_medical_ai_response(user_message, enhanced_context)
     except:
         return generate_enhanced_fallback_response(user_message, context)
 
@@ -672,6 +990,17 @@ def generate_smart_response(user_message, extracted_info=None):
 def chat_interface():
     """Display the enhanced AI-powered chatbot interface."""
     st.subheader("🤖 AI-Powered Heart Disease Risk Assessment")
+    
+    # Add debugging info in expander
+    with st.expander("🔧 Debug Information (for development)"):
+        st.write("**Current Session Data:**")
+        st.json(st.session_state.user_data)
+        
+        if st.button("Test Extraction"):
+            test_text = "I'm a 58-year-old male with chest pain. My blood pressure is 150 mmHg and my cholesterol is 280 mg/dl."
+            test_extracted = extract_medical_info(test_text)
+            st.write("**Test Input:**", test_text)
+            st.write("**Extracted:**", test_extracted)
     
     # Add information about the AI assistant
     with st.expander("🧠 About this Enhanced AI Assistant"):
@@ -744,12 +1073,12 @@ def chat_interface():
                 """, unsafe_allow_html=True)
     
     # Enhanced chat input with AI suggestions
-    st.write("**🤖 AI-Powered Examples:**")
+    st.write("**🤖 Try these enhanced examples:**")
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("🩺 Heart Disease Symptoms", key="symptoms_btn"):
-            user_input = "What are the key symptoms and warning signs of heart disease I should watch for?"
+        if st.button("🩺 Detailed Symptoms", key="detailed_symptoms_btn"):
+            user_input = "I'm experiencing chest pain during exercise, I'm 62 years old, male, with blood pressure around 160 and cholesterol of 240."
             timestamp = datetime.now().strftime("%H:%M")
             st.session_state.chat_history.append(("user", user_input, timestamp))
             extracted_info = extract_medical_info(user_input)
@@ -758,8 +1087,8 @@ def chat_interface():
             st.rerun()
     
     with col2:
-        if st.button("📊 Risk Factors", key="risk_btn"):
-            user_input = "What are the main risk factors for heart disease and how can I reduce my risk?"
+        if st.button("📊 Medical Values", key="medical_values_btn"):
+            user_input = "I'm a 45-year-old female. My doctor said my BP is 140 mmHg and cholesterol is 220 mg/dl. Should I be concerned?"
             timestamp = datetime.now().strftime("%H:%M")
             st.session_state.chat_history.append(("user", user_input, timestamp))
             extracted_info = extract_medical_info(user_input)
@@ -768,8 +1097,8 @@ def chat_interface():
             st.rerun()
     
     with col3:
-        if st.button("💪 Prevention Tips", key="prevention_btn"):
-            user_input = "How can I prevent heart disease through lifestyle changes and what should I monitor?"
+        if st.button("💡 Risk Assessment", key="risk_assessment_btn"):
+            user_input = "What does it mean if I have high blood pressure and cholesterol? I'm 55 years old."
             timestamp = datetime.now().strftime("%H:%M")
             st.session_state.chat_history.append(("user", user_input, timestamp))
             extracted_info = extract_medical_info(user_input)
@@ -779,10 +1108,10 @@ def chat_interface():
     
     # Enhanced chat input
     user_input = st.text_area(
-        "🗣️ Ask your AI assistant about heart health:", 
+        "🗣️ Describe your medical situation or ask questions:", 
         key="chat_input", 
-        placeholder="e.g., 'I'm 58 years old, male, with high blood pressure 160/95 and cholesterol 280. I sometimes get chest pain during exercise. What's my risk?'",
-        height=80
+        placeholder="Examples:\n• 'I'm a 58-year-old male with chest pain when exercising'\n• 'My blood pressure is 150 and cholesterol is 280'\n• 'What are the warning signs of heart disease?'",
+        height=100
     )
     
     col1, col2, col3 = st.columns([1, 1, 2])
