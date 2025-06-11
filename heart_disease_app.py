@@ -8,17 +8,20 @@ from datetime import datetime
 import requests
 import json
 
+# =============================================================================
+# CONFIGURATION AND SETUP
+# =============================================================================
+
 # Hugging Face API Configuration
-# Use environment variable or Streamlit secrets for API token
 HF_API_TOKEN = os.getenv("HF_API_TOKEN") or st.secrets.get("HF_API_TOKEN", "")
 HF_API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct"
 
-# Check if model files exist
+# Model file paths
 model_path = 'saved_models/logistic_regression_model.joblib'
 scaler_path = 'saved_models/scaler.joblib'
 preprocessing_info_path = 'saved_models/preprocessing_info.joblib'
 
-# Initialize variables
+# Initialize model variables
 model = None
 scaler = None
 preprocessing_info = None
@@ -34,7 +37,18 @@ try:
 except Exception as e:
     st.error(f"Error loading model files: {str(e)}")
 
-# Define preprocessing function with actual implementation
+# Initialize session state
+if 'chat_history' not in st.session_state:
+    st.session_state.chat_history = []
+if 'user_data' not in st.session_state:
+    st.session_state.user_data = {}
+if 'chat_mode' not in st.session_state:
+    st.session_state.chat_mode = False
+
+# =============================================================================
+# DATA PREPROCESSING FUNCTIONS
+# =============================================================================
+
 def preprocess_user_input(user_data):
     """
     Preprocess user input to match the format expected by the model.
@@ -153,15 +167,10 @@ def predict_heart_disease(user_data):
             'error': str(e)
         }
 
-# Initialize session state for chat history
-if 'chat_history' not in st.session_state:
-    st.session_state.chat_history = []
-if 'user_data' not in st.session_state:
-    st.session_state.user_data = {}
-if 'chat_mode' not in st.session_state:
-    st.session_state.chat_mode = False
+# =============================================================================
+# TEXT EXTRACTION FUNCTIONS
+# =============================================================================
 
-# Extract medical information from user text input
 def extract_medical_info(text):
     """
     Enhanced medical information extraction from user text input.
@@ -230,7 +239,7 @@ def extract_medical_info(text):
     bp_patterns = [
         r'\b(?:blood\s*pressure|bp)\s*(?:is\s*|of\s*|:\s*)?(\d{2,3})(?:\s*mmhg|mm\s*hg)?\b',
         r'\b(\d{2,3})\s*(?:mmhg|mm\s*hg)\s*(?:blood\s*pressure|bp)?\b',
-        r'\b(\d{2,3})/\d{2,3}\s*(?:mmhg|mm\s*hg)?\b',  # systolic from BP reading
+        r'\b(\d{2,3})/\d{2,3}\s*(?:mmhg|mm\s*hg)?\b',
         r'\bpressure\s*(?:is\s*|of\s*|:\s*)?(\d{2,3})\b'
     ]
     
@@ -287,6 +296,10 @@ def extract_medical_info(text):
             break
     
     return info
+
+# =============================================================================
+# AI RESPONSE FUNCTIONS
+# =============================================================================
 
 def generate_enhanced_fallback_response(user_message, context=""):
     """
@@ -427,12 +440,6 @@ Thank you for your question about: "{user_message}"
 
 ⚠️ For personalized medical advice, please consult qualified healthcare professionals."""
 
-def get_medical_ai_response(user_message, context=""):
-    """
-    Alias for get_ai_response to maintain compatibility
-    """
-    return get_ai_response(user_message, context)
-
 def get_ai_response(user_message, context=""):
     """
     Enhanced AI response system with better prompt engineering
@@ -458,7 +465,6 @@ Be empathetic, professional, and informative. Focus on heart disease risk factor
         # Enhanced context processing
         context_summary = ""
         if context:
-            # Parse context to provide better responses
             if "Patient data:" in context:
                 data_part = context.split("Patient data:")[1].split("|")[0].strip()
                 context_summary = f"Current patient information: {data_part}\n"
@@ -502,17 +508,14 @@ Response: [/INST]"""
                 
                 # Clean up the response
                 if ai_response:
-                    # Remove any prompt repetition
                     ai_response = ai_response.replace(system_prompt, "").strip()
                     ai_response = ai_response.replace(user_message, "").strip()
                     
-                    # Ensure medical disclaimer
                     if "consult" not in ai_response.lower() and "medical advice" not in ai_response.lower():
                         ai_response += "\n\n⚠️ Please consult healthcare professionals for medical advice."
                     
                     return ai_response
         
-        # Enhanced fallback
         return generate_enhanced_fallback_response(user_message, context)
         
     except requests.exceptions.Timeout:
@@ -530,13 +533,11 @@ def generate_smart_response(user_message, extracted_info=None):
     context_parts = []
     
     if st.session_state.user_data:
-        # Format existing data nicely
         data_str = ", ".join([f"{k}: {v}" for k, v in st.session_state.user_data.items()])
         context_parts.append(f"Existing patient data: {data_str}")
     
     if st.session_state.chat_history:
-        # Get more relevant conversation history
-        recent_history = st.session_state.chat_history[-4:]  # Last 4 exchanges
+        recent_history = st.session_state.chat_history[-4:]
         history_str = " | ".join([f"{role}: {msg[:100]}..." if len(msg) > 100 else f"{role}: {msg}" 
                                  for role, msg, _ in recent_history])
         context_parts.append(f"Recent conversation: {history_str}")
@@ -600,10 +601,8 @@ def generate_smart_response(user_message, extracted_info=None):
         
         # Add AI-powered medical insight
         try:
-            # Create enhanced context for AI analysis
             medical_context = f"Patient profile: {extracted_info}. Complete data: {st.session_state.user_data}"
             
-            # Enhanced AI query for medical insights
             insight_query = f"""Based on the medical information provided ({extracted_info}), provide brief educational insights about:
             1. The significance of these values for heart disease risk
             2. Any notable risk factors identified
@@ -611,7 +610,7 @@ def generate_smart_response(user_message, extracted_info=None):
             
             Keep response concise and educational."""
             
-            ai_insight = get_medical_ai_response(insight_query, medical_context)
+            ai_insight = get_ai_response(insight_query, medical_context)
             
             if ai_insight and len(ai_insight) > 30:
                 response_parts.append(f"\n💡 **AI Medical Insight:**\n{ai_insight}")
@@ -632,361 +631,19 @@ def generate_smart_response(user_message, extracted_info=None):
     
     # Enhanced general query handling with AI
     try:
-        # Create better context for general medical queries
         enhanced_context = context
         if st.session_state.user_data:
             data_summary = f"Patient has provided: {', '.join(st.session_state.user_data.keys())}"
             enhanced_context += f" | {data_summary}"
         
-        return get_medical_ai_response(user_message, enhanced_context)
+        return get_ai_response(user_message, enhanced_context)
     except:
         return generate_enhanced_fallback_response(user_message, context)
 
-# Initialize session state for chat history
-if 'chat_history' not in st.session_state:
-    st.session_state.chat_history = []
-if 'user_data' not in st.session_state:
-    st.session_state.user_data = {}
-if 'chat_mode' not in st.session_state:
-    st.session_state.chat_mode = False
+# =============================================================================
+# UI COMPONENTS
+# =============================================================================
 
-# Extract medical information from user text input
-def extract_medical_info(text):
-    """
-    Enhanced medical information extraction from user text input.
-    
-    Parameters:
-    -----------
-    text : str
-        User input text
-        
-    Returns:
-    --------
-    dict
-        Extracted medical information
-    """
-    info = {}
-    text_lower = text.lower()
-    
-    # Extract age with multiple patterns
-    age_patterns = [
-        r'\b(\d{1,3})\s*(?:years?\s*old|yo|age|year-old)\b',
-        r'\bi\s*(?:am|\'m)\s*(?:a\s*)?(\d{1,3})\s*(?:years?\s*old|yo)?\b',
-        r'\b(\d{1,3})\s*(?:-|–)\s*year\s*old\b',
-        r'\bage\s*(?:of\s*|is\s*)?(\d{1,3})\b',
-        r'\b(\d{1,3})\s*yrs?\b'
-    ]
-    
-    for pattern in age_patterns:
-        age_match = re.search(pattern, text_lower)
-        if age_match:
-            age = int(age_match.group(1))
-            if 20 <= age <= 100:
-                info['Age'] = age
-                break
-    
-    # Extract gender with enhanced patterns
-    gender_patterns = [
-        (r'\b(?:i\s*(?:am|\'m)\s*(?:a\s*)?)?(?:male|man|men|boy|guy|gentleman)\b', 1),
-        (r'\b(?:i\s*(?:am|\'m)\s*(?:a\s*)?)?(?:female|woman|women|girl|lady)\b', 0),
-        (r'\bgender\s*(?:is\s*|:\s*)?(?:male|man)\b', 1),
-        (r'\bgender\s*(?:is\s*|:\s*)?(?:female|woman)\b', 0),
-        (r'\bsex\s*(?:is\s*|:\s*)?(?:male|m)\b', 1),
-        (r'\bsex\s*(?:is\s*|:\s*)?(?:female|f)\b', 0)
-    ]
-    
-    for pattern, gender_value in gender_patterns:
-        if re.search(pattern, text_lower):
-            info['Sex'] = gender_value
-            break
-    
-    # Extract chest pain type with enhanced patterns
-    chest_pain_patterns = [
-        (r'\btypical\s*(?:angina|chest\s*pain)\b', 'typical'),
-        (r'\batypical\s*(?:angina|chest\s*pain)\b', 'nontypical'),
-        (r'\bnon[\s-]?anginal\s*(?:chest\s*pain)?\b', 'nonanginal'),
-        (r'\basymptomatic\b|no\s*chest\s*pain\b', 'asymptomatic'),
-        (r'\bchest\s*pain\b(?!\s*(?:type|is))', 'typical'),  # default assumption
-        (r'\bangina\b(?!\s*(?:typical|atypical))', 'typical')
-    ]
-    
-    for pattern, chest_pain_type in chest_pain_patterns:
-        if re.search(pattern, text_lower):
-            info['ChestPain'] = chest_pain_type
-            break
-    
-    # Extract blood pressure with multiple patterns
-    bp_patterns = [
-        r'\b(?:blood\s*pressure|bp)\s*(?:is\s*|of\s*|:\s*)?(\d{2,3})(?:\s*mmhg|mm\s*hg)?\b',
-        r'\b(\d{2,3})\s*(?:mmhg|mm\s*hg)\s*(?:blood\s*pressure|bp)?\b',
-        r'\b(\d{2,3})/\d{2,3}\s*(?:mmhg|mm\s*hg)?\b',  # systolic from BP reading
-        r'\bpressure\s*(?:is\s*|of\s*|:\s*)?(\d{2,3})\b'
-    ]
-    
-    for pattern in bp_patterns:
-        bp_match = re.search(pattern, text_lower)
-        if bp_match:
-            bp = int(bp_match.group(1))
-            if 80 <= bp <= 220:
-                info['RestBP'] = bp
-                break
-    
-    # Extract cholesterol with multiple patterns
-    chol_patterns = [
-        r'\b(?:cholesterol|chol)\s*(?:is\s*|of\s*|level\s*is\s*|:\s*)?(\d{2,3})\s*(?:mg/dl|mg\s*/\s*dl)?\b',
-        r'\b(\d{2,3})\s*(?:mg/dl|mg\s*/\s*dl)\s*(?:cholesterol|chol)?\b',
-        r'\btotal\s*cholesterol\s*(?:is\s*|:\s*)?(\d{2,3})\b',
-        r'\bchol\s*(?:level\s*)?(?:is\s*|:\s*)?(\d{2,3})\b'
-    ]
-    
-    for pattern in chol_patterns:
-        chol_match = re.search(pattern, text_lower)
-        if chol_match:
-            chol = int(chol_match.group(1))
-            if 100 <= chol <= 600:
-                info['Chol'] = chol
-                break
-    
-    # Extract heart rate with multiple patterns
-    hr_patterns = [
-        r'\b(?:heart\s*rate|hr)\s*(?:is\s*|of\s*|:\s*)?(\d{2,3})\s*(?:bpm|beats\s*per\s*minute)?\b',
-        r'\b(?:max|maximum)\s*(?:heart\s*rate|hr)\s*(?:is\s*|of\s*|:\s*)?(\d{2,3})\b',
-        r'\b(\d{2,3})\s*(?:bpm|beats\s*per\s*minute)\b',
-        r'\bpulse\s*(?:is\s*|of\s*|:\s*)?(\d{2,3})\b'
-    ]
-    
-    for pattern in hr_patterns:
-        hr_match = re.search(pattern, text_lower)
-        if hr_match:
-            hr = int(hr_match.group(1))
-            if 50 <= hr <= 220:
-                info['MaxHR'] = hr
-                break
-    
-    # Extract exercise-related symptoms
-    exercise_patterns = [
-        r'\b(?:exercise|exertion|activity)\s*(?:induced\s*)?(?:chest\s*pain|angina|discomfort)\b',
-        r'\bchest\s*pain\s*(?:during|with|when)\s*(?:exercise|exertion|activity)\b',
-        r'\bpain\s*(?:during|with|when)\s*(?:exercise|exertion|walking|running)\b'
-    ]
-    
-    for pattern in exercise_patterns:
-        if re.search(pattern, text_lower):
-            info['ExAng'] = 1
-            break
-    
-    return info
-
-def get_ai_response(user_message, context=""):
-    """
-    Enhanced AI response system with better prompt engineering
-    """
-    try:
-        headers = {
-            "Authorization": f"Bearer {HF_API_TOKEN}",
-            "Content-Type": "application/json"
-        }
-        
-        # Enhanced medical-focused prompt for Mistral
-        system_prompt = """You are an expert medical AI assistant specializing in heart disease risk assessment. 
-        
-Your role is to:
-- Extract medical information from patient descriptions
-- Provide educational information about cardiovascular health
-- Guide patients through risk assessment
-- Explain medical concepts in simple terms
-- Always recommend consulting healthcare professionals
-
-Be empathetic, professional, and informative. Focus on heart disease risk factors, symptoms, and prevention."""
-        
-        # Enhanced context processing
-        context_summary = ""
-        if context:
-            # Parse context to provide better responses
-            if "Patient data:" in context:
-                data_part = context.split("Patient data:")[1].split("|")[0].strip()
-                context_summary = f"Current patient information: {data_part}\n"
-            
-            if "Recent conversation:" in context:
-                conv_part = context.split("Recent conversation:")[1].strip()
-                context_summary += f"Recent discussion: {conv_part}\n"
-        
-        # Format the prompt for Mistral with better structure
-        full_prompt = f"""<s>[INST] {system_prompt}
-
-{context_summary}
-Patient says: "{user_message}"
-
-Please provide a helpful response that:
-1. Acknowledges any medical information shared
-2. Provides relevant educational information
-3. Suggests next steps if appropriate
-4. Reminds about professional medical consultation
-
-Response: [/INST]"""
-        
-        payload = {
-            "inputs": full_prompt,
-            "parameters": {
-                "max_new_tokens": 250,
-                "temperature": 0.7,
-                "top_p": 0.9,
-                "do_sample": True,
-                "return_full_text": False,
-                "repetition_penalty": 1.1
-            }
-        }
-        
-        response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=20)
-        
-        if response.status_code == 200:
-            result = response.json()
-            if isinstance(result, list) and len(result) > 0:
-                ai_response = result[0].get('generated_text', '').strip()
-                
-                # Clean up the response
-                if ai_response:
-                    # Remove any prompt repetition
-                    ai_response = ai_response.replace(system_prompt, "").strip()
-                    ai_response = ai_response.replace(user_message, "").strip()
-                    
-                    # Ensure medical disclaimer
-                    if "consult" not in ai_response.lower() and "medical advice" not in ai_response.lower():
-                        ai_response += "\n\n⚠️ Please consult healthcare professionals for medical advice."
-                    
-                    return ai_response
-        
-        # Enhanced fallback
-        return generate_enhanced_fallback_response(user_message, context)
-        
-    except requests.exceptions.Timeout:
-        st.warning("🤖 AI response taking longer than usual. Using enhanced response.")
-        return generate_enhanced_fallback_response(user_message, context)
-    except Exception as e:
-        st.warning(f"🤖 AI service temporarily unavailable. Error: {str(e)}")
-        return generate_enhanced_fallback_response(user_message, context)
-
-def generate_smart_response(user_message, extracted_info=None):
-    """
-    Enhanced intelligent response system with better information processing
-    """
-    # Build comprehensive context
-    context_parts = []
-    
-    if st.session_state.user_data:
-        # Format existing data nicely
-        data_str = ", ".join([f"{k}: {v}" for k, v in st.session_state.user_data.items()])
-        context_parts.append(f"Existing patient data: {data_str}")
-    
-    if st.session_state.chat_history:
-        # Get more relevant conversation history
-        recent_history = st.session_state.chat_history[-4:]  # Last 4 exchanges
-        history_str = " | ".join([f"{role}: {msg[:100]}..." if len(msg) > 100 else f"{role}: {msg}" 
-                                 for role, msg, _ in recent_history])
-        context_parts.append(f"Recent conversation: {history_str}")
-    
-    context = " | ".join(context_parts)
-    
-    # Enhanced information extraction and response
-    if extracted_info:
-        response_parts = ["🩺 **Medical Information Successfully Extracted:**\n"]
-        
-        # Process extracted information with enhanced descriptions
-        for key, value in extracted_info.items():
-            if key == 'Sex':
-                response_parts.append(f"• **Gender:** {'Male' if value == 1 else 'Female'}")
-            elif key == 'Age':
-                age_category = ("Young adult" if value < 45 else 
-                              "Middle-aged" if value < 65 else "Senior")
-                response_parts.append(f"• **Age:** {value} years ({age_category})")
-            elif key == 'ChestPain':
-                chest_pain_desc = {
-                    'typical': 'Typical angina (classic chest pain)',
-                    'nontypical': 'Atypical angina',
-                    'nonanginal': 'Non-anginal chest pain',
-                    'asymptomatic': 'No chest pain symptoms'
-                }
-                response_parts.append(f"• **Chest Pain:** {chest_pain_desc.get(value, value.title())}")
-            elif key == 'RestBP':
-                bp_status = ("High (≥140)" if value >= 140 else 
-                           "Elevated (120-139)" if value >= 120 else "Normal (<120)")
-                response_parts.append(f"• **Blood Pressure:** {value} mmHg ({bp_status})")
-            elif key == 'Chol':
-                chol_status = ("High (≥240)" if value >= 240 else 
-                             "Borderline (200-239)" if value >= 200 else "Normal (<200)")
-                response_parts.append(f"• **Cholesterol:** {value} mg/dl ({chol_status})")
-            elif key == 'MaxHR':
-                max_hr_expected = 220 - st.session_state.user_data.get('Age', 50)
-                hr_status = ("Above expected" if value > max_hr_expected else 
-                           "Within normal range" if value > max_hr_expected * 0.8 else "Below expected")
-                response_parts.append(f"• **Max Heart Rate:** {value} bpm ({hr_status})")
-            elif key == 'ExAng':
-                response_parts.append(f"• **Exercise-Induced Symptoms:** {'Yes - pain with exertion' if value == 1 else 'No symptoms with exercise'}")
-        
-        # Update session state with new information
-        st.session_state.user_data.update(extracted_info)
-        
-        # Enhanced completeness check
-        essential_fields = ['Age', 'Sex', 'ChestPain', 'RestBP', 'Chol']
-        additional_fields = ['MaxHR', 'ExAng']
-        
-        missing_essential = [field for field in essential_fields if field not in st.session_state.user_data]
-        missing_additional = [field for field in additional_fields if field not in st.session_state.user_data]
-        
-        if missing_essential:
-            response_parts.append(f"\n📋 **Essential information still needed:** {', '.join(missing_essential)}")
-            response_parts.append("Please provide these details for a complete assessment.")
-        elif missing_additional:
-            response_parts.append(f"\n📊 **Additional helpful information:** {', '.join(missing_additional)}")
-            response_parts.append("You can provide more details or proceed with current information.")
-        else:
-            response_parts.append("\n✅ **Comprehensive information collected!** Ready for detailed risk assessment.")
-        
-        # Add AI-powered medical insight
-        try:
-            # Create enhanced context for AI analysis
-            medical_context = f"Patient profile: {extracted_info}. Complete data: {st.session_state.user_data}"
-            
-            # Enhanced AI query for medical insights
-            insight_query = f"""Based on the medical information provided ({extracted_info}), provide brief educational insights about:
-            1. The significance of these values for heart disease risk
-            2. Any notable risk factors identified
-            3. General recommendations (not medical advice)
-            
-            Keep response concise and educational."""
-            
-            ai_insight = get_medical_ai_response(insight_query, medical_context)
-            
-            if ai_insight and len(ai_insight) > 30:
-                response_parts.append(f"\n💡 **AI Medical Insight:**\n{ai_insight}")
-        except Exception as e:
-            # Fallback insight based on extracted information
-            risk_factors = []
-            if 'Age' in extracted_info and extracted_info['Age'] > 45:
-                risk_factors.append("age-related risk increase")
-            if 'RestBP' in extracted_info and extracted_info['RestBP'] >= 140:
-                risk_factors.append("elevated blood pressure")
-            if 'Chol' in extracted_info and extracted_info['Chol'] >= 240:
-                risk_factors.append("high cholesterol")
-            
-            if risk_factors:
-                response_parts.append(f"\n⚠️ **Notable factors:** {', '.join(risk_factors)} detected.")
-        
-        return "\n".join(response_parts)
-    
-    # Enhanced general query handling with AI
-    try:
-        # Create better context for general medical queries
-        enhanced_context = context
-        if st.session_state.user_data:
-            data_summary = f"Patient has provided: {', '.join(st.session_state.user_data.keys())}"
-            enhanced_context += f" | {data_summary}"
-        
-        return get_medical_ai_response(user_message, enhanced_context)
-    except:
-        return generate_enhanced_fallback_response(user_message, context)
-
-# Chat interface function (enhanced)
 def chat_interface():
     """Display the enhanced AI-powered chatbot interface."""
     st.subheader("🤖 AI-Powered Heart Disease Risk Assessment")
@@ -1024,9 +681,8 @@ def chat_interface():
     col1, col2 = st.columns([3, 1])
     with col2:
         try:
-            # Test API connectivity
             test_response = requests.get("https://api-inference.huggingface.co/", timeout=5)
-            if test_response.status_code in [200, 404]:  # 404 is expected for root endpoint
+            if test_response.status_code in [200, 404]:
                 st.success("🟢 AI Online")
             else:
                 st.warning("🟡 AI Limited")
@@ -1037,7 +693,6 @@ def chat_interface():
     chat_container = st.container()
     with chat_container:
         if not st.session_state.chat_history:
-            # Show welcome message
             st.markdown("""
             <div style="text-align: left; margin: 10px 0;">
                 <div style="background-color: #f8f9fa; color: #333; padding: 15px; border-radius: 20px; border-left: 4px solid #007bff;">
@@ -1126,19 +781,18 @@ def chat_interface():
         st.rerun()
     
     if send_button and user_input:
-        # Add user message to history
         timestamp = datetime.now().strftime("%H:%M")
         st.session_state.chat_history.append(("user", user_input, timestamp))
         
-        # Extract information and generate response
         extracted_info = extract_medical_info(user_input)
         bot_response = generate_smart_response(user_input, extracted_info)
         
-        # Add bot response to history
         st.session_state.chat_history.append(("bot", bot_response, timestamp))
-        
-        # Clear input and rerun
         st.rerun()
+
+# =============================================================================
+# MAIN APPLICATION
+# =============================================================================
 
 # Streamlit app
 st.title("🩺 AI-Powered Heart Disease Prediction System")
@@ -1302,10 +956,8 @@ with tab2:
         result = predict_heart_disease(user_data)
         
         if result and result['success']:
-            # Display result with nice formatting
             st.subheader("📊 Comprehensive Risk Assessment Results")
             
-            # Create columns for metrics
             col1, col2, col3 = st.columns(3)
             
             with col1:
@@ -1317,7 +969,6 @@ with tab2:
             with col3:
                 st.metric("Risk Level", result['risk_level'])
             
-            # Add detailed recommendations based on the prediction
             st.subheader("💡 Medical Recommendations")
             
             if result['prediction'] == 'Heart Disease':
